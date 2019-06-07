@@ -11,11 +11,13 @@ usage=$(cat <<'END_USAGE'
   The script will run only if the reference genome file and sequence file are in the same path
   or directory.
 
-  Usage: call_consensus.sh [-h] <reference> <index> <stock>
+  Usage: call_consensus.sh [-h] <reference> <bwt2index> <stock>
  
-   -h        	print this help 
+   -h         print this help 
 
-   <reference> 	reference file only in FASTA format; input name ID without .fasta extension
+   <reference>  indexed reference file only in FASTA format; input name ID without .fasta extension
+
+   <bwt2index> bowtie2 reference index
 
    <stock>      sequence file only in FASTQ.GZ format; input name ID without .FASTQ.GZ extension
   
@@ -48,30 +50,37 @@ indexRef=${index}
 inFile=${stock}.fastq.gz
 
 ### BOWTIE2 alignment 
-bowtie2 -x $indexRef -U $inFile -p 4 | samtools sort -o ${inFile}.bowtie2.bam -O bam -T bowtie2.deleteme
+bowtie2 -x $indexRef -U $inFile -p 4 | samtools sort -o ${stock}.bowtie2.bam -O bam -T bowtie2.deleteme
 
-# ### index sorted bam 
-# samtools index ${inFile}.bowtie2.bam;
+### index sorted bam 
+samtools index ${stock}.bowtie2.bam;
 
-# ### generate a variant calling file from the sorted bam
-# bcftools mpileup -f $inRef ${inFile}.bowtie2.bam | bcftools call -mv -Oz -o ${stock}.vcf.gz
+### generate a variant calling file from the sorted bam
+bcftools mpileup -f $inRef ${stock}.bowtie2.bam | bcftools call -mv -Oz -o ${stock}.vcf.gz
 
-# ### index the variant calling file
-# bcftools index ${stock}.vcf.gz
+### index the variant calling file
+bcftools index ${stock}.vcf.gz
 
-# ### normalize indels
-# bcftools norm -f $inRef ${stock}.vcf.gz -Ob -o ${stock}.norm.bcf
+### normalize indels
+bcftools norm -f $inRef ${stock}.vcf.gz -Ob -o ${stock}.norm.bcf
 
-# ### filter adjacent indels within 5bp
-# bcftools filter --IndelGap 5 ${stock}.norm.bcf -Ob -o ${stock}.norm.flt-indels.bcf
+### filter adjacent indels within 5bp
+bcftools filter --IndelGap 5 ${stock}.norm.bcf -Ob -o ${stock}.norm.flt-indels.bcf
 
-# ### get the genome consensus
-# cat $inRef | bcftools consensus ${stock}.vcf.gz > ${old_reference}_consensus.fasta
+### get the genome consensus
+cat $inRef | bcftools consensus ${stock}.vcf.gz > ${old_reference}_consensus.fasta
 
 
-# ### align the old reference to new reference and index the bam
-# bowtie2 -x $old_reference -f ${old_reference}_consensus.fasta -p 4 | samtools sort -o ${old_reference}_consensus.bowtie2.bam -O bam -T bowtie2.deleteme
-# samtools index ${old_reference}_consensus.bowtie2.bam
+### align the old reference to new reference and index the bam
+bowtie2 -x $indexRef -f ${old_reference}_consensus.fasta -p 4 | samtools sort -o ${old_reference}_consensus.bowtie2.bam -O bam -T bowtie2.deleteme
+samtools index ${old_reference}_consensus.bowtie2.bam
 
+### remove all useless files
+rm ${stock}.bowtie2.bam
+rm ${stock}.bowtie2.bam.bai
+rm ${stock}.vcf.gz
+rm ${stock}.vcf.gz.csi
+rm ${stock}.norm.bcf
+rm ${stock}.norm.flt-indels.bcf
 
 exit 0
